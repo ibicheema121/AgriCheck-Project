@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
-from ..database import get_db
-from ..schemas.sensor import SensorReadingCreate, SensorReadingResponse
-from ..crud import sensor as crud
+from database import get_db
+from schemas.sensor import SensorReadingCreate, SensorReadingResponse
+from crud import sensor as crud
 
 router = APIRouter(prefix="/readings", tags=["Sensor Readings"])
 
