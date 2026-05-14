@@ -1,0 +1,44 @@
+.\venv\Scripts\activate
+
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+
+# Find process using port 8000
+>> netstat -ano | findstr :8000
+>> 
+>> # Output example:
+>> # TCP    0.0.0.0:8000    0.0.0.0:0    LISTENING    12345
+>> 
+>> # Kill using PID (replace 12345 with actual PID)
+>> taskkill /F /PID 12345
+
+
+taskkill /F /PID 51328 /PID 46848 /PID 45640
+
+
+
+
+# Terminal 2: Ngrok start karo
+>> ngrok http 8000
+
+
+
+pip freeze > requirements.txt
+
+
+
+
+
+
+
+FORCEFULLY STOP UVICORN SERVER:
+tasklist | findstr uvicorn
+taskkill /PID 58420 /F
+
+
+
+
+
+
+npm install 
+npm run dev

@@ -1,0 +1,766 @@
+// #include <Wire.h>
+// #include <LiquidCrystal_I2C.h>
+
+// #define RS485_RX_PIN      16
+// #define RS485_TX_PIN      17
+// #define RS485_DE_RE_PIN   4
+// #define RS485_BAUD        9600
+// #define LCD_ADDR          0x27
+// #define LCD_COLS          20
+// #define LCD_ROWS          4
+// #define SLAVE_ID          0x01
+// #define FC_READ_HOLD      0x03
+// #define REG_NPK_START     0x0004
+// #define REG_NPK_COUNT     3
+// #define MODBUS_TIMEOUT_MS 1000
+// #define POLL_INTERVAL_MS  3000
+// #define DE_RE_SETTLE_MS   50
+
+// LiquidCrystal_I2C lcd(LCD_ADDR, LCD_COLS, LCD_ROWS);
+// HardwareSerial npkSerial(2);
+// bool lcdAvailable = false;
+
+// uint16_t crc16Modbus(const uint8_t *buf, uint8_t len) {
+//     uint16_t crc = 0xFFFF;
+//     for (uint8_t i = 0; i < len; i++) {
+//         crc ^= (uint16_t)buf[i];
+//         for (uint8_t b = 0; b < 8; b++) {
+//             if (crc & 0x0001) { crc = (crc >> 1) ^ 0xA001; }
+//             else { crc >>= 1; }
+//         }
+//     }
+//     return crc;
+// }
+
+// void sendModbusRequest(uint8_t slaveID, uint16_t regStart, uint16_t regCount) {
+//     uint8_t frame[8];
+//     frame[0] = slaveID;
+//     frame[1] = FC_READ_HOLD;
+//     frame[2] = (regStart >> 8) & 0xFF;
+//     frame[3] =  regStart       & 0xFF;
+//     frame[4] = (regCount >> 8) & 0xFF;
+//     frame[5] =  regCount       & 0xFF;
+//     uint16_t crc = crc16Modbus(frame, 6);
+//     frame[6] = crc & 0xFF;
+//     frame[7] = (crc >> 8) & 0xFF;
+
+//     Serial.print("[TX] ");
+//     for (uint8_t i = 0; i < 8; i++) Serial.printf("0x%02X ", frame[i]);
+//     Serial.println();
+
+//     while (npkSerial.available()) npkSerial.read();
+
+//     digitalWrite(RS485_DE_RE_PIN, HIGH);
+//     delayMicroseconds(100);
+//     npkSerial.write(frame, 8);
+//     npkSerial.flush();
+//     digitalWrite(RS485_DE_RE_PIN, LOW);
+
+//     delay(DE_RE_SETTLE_MS);
+// }
+
+// bool receiveModbusResponse(uint16_t *nitrogen, uint16_t *phosphorus, uint16_t *potassium) {
+//     const uint8_t EXPECTED = 11;
+//     uint8_t buf[32];
+//     uint8_t idx = 0;
+//     uint32_t deadline = millis() + MODBUS_TIMEOUT_MS;
+//     bool frameStarted = false;
+
+//     while (millis() < deadline) {
+//         while (npkSerial.available() && idx < sizeof(buf)) {
+//             uint8_t incoming = (uint8_t)npkSerial.read();
+
+//             if (!frameStarted) {
+//                 if (incoming == SLAVE_ID) {
+//                     frameStarted = true;
+//                     buf[idx++] = incoming;
+//                     Serial.printf("[SYNC] Slave ID 0x%02X found. Frame capture started.\n", incoming);
+//                 } else {
+//                     Serial.printf("[SKIP] Garbage byte: 0x%02X\n", incoming);
+//                 }
+//             } else {
+//                 buf[idx++] = incoming;
+//             }
+//         }
+//         if (idx >= EXPECTED) break;
+//         delay(1);
+//     }
+
+//     if (idx > 0) {
+//         Serial.print("[RX] ");
+//         for (uint8_t i = 0; i < idx; i++) Serial.printf("0x%02X ", buf[i]);
+//         Serial.println();
+//     } else {
+//         Serial.println("[RX] No response (timeout).");
+//         return false;
+//     }
+
+//     if (idx < EXPECTED) {
+//         Serial.printf("[ERR] Short frame: got %d, need %d\n", idx, EXPECTED);
+//         return false;
+//     }
+//     if (buf[0] != SLAVE_ID) {
+//         Serial.printf("[ERR] Slave ID mismatch: got 0x%02X\n", buf[0]);
+//         return false;
+//     }
+//     if (buf[1] & 0x80) {
+//         Serial.printf("[ERR] Modbus exception: 0x%02X\n", buf[2]);
+//         return false;
+//     }
+//     if (buf[1] != FC_READ_HOLD) {
+//         Serial.printf("[ERR] Wrong function code: 0x%02X\n", buf[1]);
+//         return false;
+//     }
+//     if (buf[2] != REG_NPK_COUNT * 2) {
+//         Serial.printf("[ERR] Wrong byte count: %d\n", buf[2]);
+//         return false;
+//     }
+
+//     uint16_t rxCRC  = (uint16_t)buf[idx - 1] << 8 | buf[idx - 2];
+//     uint16_t calCRC = crc16Modbus(buf, idx - 2);
+//     Serial.printf("[CRC] RX=0x%04X  CALC=0x%04X  %s\n",
+//                   rxCRC, calCRC, rxCRC == calCRC ? "OK" : "FAIL");
+//     if (rxCRC != calCRC) return false;
+
+//     *nitrogen   = (uint16_t)buf[3] << 8 | buf[4];
+//     *phosphorus = (uint16_t)buf[5] << 8 | buf[6];
+//     *potassium  = (uint16_t)buf[7] << 8 | buf[8];
+
+//     return true;
+// }
+
+// bool checkLCD() {
+//     Wire.beginTransmission(LCD_ADDR);
+//     return (Wire.endTransmission() == 0);
+// }
+
+// void lcdWrite(uint8_t col, uint8_t row, const char *text, uint8_t width = 20) {
+//     if (!lcdAvailable) return;
+//     lcd.setCursor(col, row);
+//     uint8_t i = 0;
+//     while (text[i] && i < width) { lcd.print(text[i++]); }
+//     while (i++ < width)          { lcd.print(' ');        }
+// }
+
+// void showWelcome() {
+//     if (!lcdAvailable) return;
+//     lcd.clear();
+//     lcdWrite(0, 0, "====================");
+//     lcdWrite(0, 1, "   AgriCheck v1.0   ");
+//     lcdWrite(0, 2, "  NPK Soil Monitor  ");
+//     lcdWrite(0, 3, "====================");
+//     delay(2500);
+// }
+
+// void showNPK(uint16_t n, uint16_t p, uint16_t k) {
+//     if (!lcdAvailable) return;
+//     char row[21];
+//     lcdWrite(0, 0, "-- AgriCheck NPK  --");
+//     snprintf(row, sizeof(row), "N (Nitrogen)  :%4d ", n); lcdWrite(0, 1, row);
+//     snprintf(row, sizeof(row), "P (Phosphorus):%4d ", p); lcdWrite(0, 2, row);
+//     snprintf(row, sizeof(row), "K (Potassium) :%4d ", k); lcdWrite(0, 3, row);
+// }
+
+// void showError() {
+//     if (!lcdAvailable) return;
+//     lcdWrite(0, 0, "-- AgriCheck NPK  --");
+//     lcdWrite(0, 1, "                    ");
+//     lcdWrite(0, 2, "  !! Sensor Error!! ");
+//     lcdWrite(0, 3, "  Check 12V & GND   ");
+// }
+
+// void setup() {
+//     Serial.begin(115200);
+//     while (!Serial) delay(10);
+
+//     pinMode(RS485_DE_RE_PIN, OUTPUT);
+//     digitalWrite(RS485_DE_RE_PIN, LOW);
+
+//     npkSerial.begin(RS485_BAUD, SERIAL_8N1, RS485_RX_PIN, RS485_TX_PIN);
+//     Serial.printf("[INIT] Serial2 RX=GPIO%d TX=GPIO%d DE/RE=GPIO%d @ %d baud\n",
+//                   RS485_RX_PIN, RS485_TX_PIN, RS485_DE_RE_PIN, RS485_BAUD);
+
+//     Wire.begin();
+//     lcdAvailable = checkLCD();
+
+//     if (lcdAvailable) {
+//         lcd.init();
+//         lcd.backlight();
+//         Serial.printf("[INIT] LCD found at 0x%02X\n", LCD_ADDR);
+//         showWelcome();
+//     } else {
+//         Serial.printf("[WARN] LCD not found at 0x%02X. Running without LCD.\n", LCD_ADDR);
+//     }
+
+//     Serial.println("[INIT] AgriCheck ready. Polling every 3 seconds.");
+//     Serial.println("--------------------------------------------");
+// }
+
+// void loop() {
+//     static uint32_t lastPoll = 0;
+//     if (millis() - lastPoll < POLL_INTERVAL_MS) return;
+//     lastPoll = millis();
+
+//     bool lcdWasAvailable = lcdAvailable;
+//     lcdAvailable = checkLCD();
+//     if (lcdAvailable && !lcdWasAvailable) {
+//         Serial.println("[LCD] Reconnected. Reinitializing...");
+//         lcd.init();
+//         lcd.backlight();
+//     }
+
+//     Serial.println("\n[POLL] Querying NPK sensor...");
+//     sendModbusRequest(SLAVE_ID, REG_NPK_START, REG_NPK_COUNT);
+
+//     uint16_t nitrogen = 0, phosphorus = 0, potassium = 0;
+//     bool ok = receiveModbusResponse(&nitrogen, &phosphorus, &potassium);
+
+//     if (ok) {
+//         Serial.println("[OK] NPK decoded:");
+//         Serial.printf("     N: %d mg/kg\n", nitrogen);
+//         Serial.printf("     P: %d mg/kg\n", phosphorus);
+//         Serial.printf("     K: %d mg/kg\n", potassium);
+//         showNPK(nitrogen, phosphorus, potassium);
+//     } else {
+//         Serial.println("[FAIL] No valid response.");
+//         showError();
+//     }
+
+//     Serial.println("--------------------------------------------");
+// }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
+#define RS485_RX_PIN      16
+#define RS485_TX_PIN      17
+#define RS485_DE_RE_PIN   4
+#define RS485_BAUD        9600
+#define LCD_ADDR          0x27
+#define LCD_COLS          20
+#define LCD_ROWS          4
+#define SLAVE_ID          0x01
+#define FC_READ_HOLD      0x03
+#define REG_START         0x0000
+#define REG_COUNT         7
+#define MODBUS_TIMEOUT_MS 1000
+#define POLL_INTERVAL_MS  3000
+#define DE_RE_SETTLE_MS   50
+
+LiquidCrystal_I2C lcd(LCD_ADDR, LCD_COLS, LCD_ROWS);
+HardwareSerial npkSerial(2);
+bool lcdAvailable = false;
+
+uint16_t crc16Modbus(const uint8_t *buf, uint8_t len) {
+    uint16_t crc = 0xFFFF;
+    for (uint8_t i = 0; i < len; i++) {
+        crc ^= (uint16_t)buf[i];
+        for (uint8_t b = 0; b < 8; b++) {
+            if (crc & 0x0001) { crc = (crc >> 1) ^ 0xA001; }
+            else { crc >>= 1; }
+        }
+    }
+    return crc;
+}
+
+void sendModbusRequest(uint8_t slaveID, uint16_t regStart, uint16_t regCount) {
+    uint8_t frame[8];
+    frame[0] = slaveID;
+    frame[1] = FC_READ_HOLD;
+    frame[2] = (regStart >> 8) & 0xFF;
+    frame[3] =  regStart       & 0xFF;
+    frame[4] = (regCount >> 8) & 0xFF;
+    frame[5] =  regCount       & 0xFF;
+    uint16_t crc = crc16Modbus(frame, 6);
+    frame[6] = crc & 0xFF;
+    frame[7] = (crc >> 8) & 0xFF;
+
+    Serial.print("[TX] ");
+    for (uint8_t i = 0; i < 8; i++) Serial.printf("0x%02X ", frame[i]);
+    Serial.println();
+
+    while (npkSerial.available()) npkSerial.read();
+
+    digitalWrite(RS485_DE_RE_PIN, HIGH);
+    delayMicroseconds(100);
+    npkSerial.write(frame, 8);
+    npkSerial.flush();
+    digitalWrite(RS485_DE_RE_PIN, LOW);
+
+    delay(DE_RE_SETTLE_MS);
+}
+
+bool receiveModbusResponse(uint16_t *humidity,   uint16_t *temperature,
+                           uint16_t *ec,         uint16_t *ph,
+                           uint16_t *nitrogen,   uint16_t *phosphorus,
+                           uint16_t *potassium) {
+    const uint8_t EXPECTED = 19;
+    uint8_t  buf[64];
+    uint8_t  idx          = 0;
+    uint32_t deadline     = millis() + MODBUS_TIMEOUT_MS;
+    bool     frameStarted = false;
+
+    while (millis() < deadline) {
+        while (npkSerial.available() && idx < sizeof(buf)) {
+            uint8_t incoming = (uint8_t)npkSerial.read();
+
+            if (!frameStarted) {
+                if (incoming == SLAVE_ID) {
+                    frameStarted = true;
+                    buf[idx++]   = incoming;
+                    Serial.printf("[SYNC] 0x%02X found. Frame capture started.\n", incoming);
+                } else {
+                    Serial.printf("[SKIP] Garbage: 0x%02X\n", incoming);
+                }
+            } else {
+                buf[idx++] = incoming;
+            }
+        }
+        if (idx >= EXPECTED) break;
+        delay(1);
+    }
+
+    if (idx > 0) {
+        Serial.print("[RX] ");
+        for (uint8_t i = 0; i < idx; i++) Serial.printf("0x%02X ", buf[i]);
+        Serial.println();
+    } else {
+        Serial.println("[RX] No response (timeout).");
+        return false;
+    }
+
+    if (idx < EXPECTED) {
+        Serial.printf("[ERR] Short frame: got %d, need %d\n", idx, EXPECTED);
+        return false;
+    }
+    if (buf[0] != SLAVE_ID) {
+        Serial.printf("[ERR] Slave ID mismatch: got 0x%02X\n", buf[0]);
+        return false;
+    }
+    if (buf[1] & 0x80) {
+        Serial.printf("[ERR] Modbus exception: 0x%02X\n", buf[2]);
+        return false;
+    }
+    if (buf[1] != FC_READ_HOLD) {
+        Serial.printf("[ERR] Wrong function code: 0x%02X\n", buf[1]);
+        return false;
+    }
+    if (buf[2] != REG_COUNT * 2) {
+        Serial.printf("[ERR] Wrong byte count: got %d, expected %d\n", buf[2], REG_COUNT * 2);
+        return false;
+    }
+
+    uint16_t rxCRC  = (uint16_t)buf[idx - 1] << 8 | buf[idx - 2];
+    uint16_t calCRC = crc16Modbus(buf, idx - 2);
+    Serial.printf("[CRC] RX=0x%04X  CALC=0x%04X  %s\n",
+                  rxCRC, calCRC, rxCRC == calCRC ? "OK" : "FAIL");
+    if (rxCRC != calCRC) return false;
+
+    *humidity    = (uint16_t)buf[3]  << 8 | buf[4];
+    *temperature = (uint16_t)buf[5]  << 8 | buf[6];
+    *ec          = (uint16_t)buf[7]  << 8 | buf[8];
+    *ph          = (uint16_t)buf[9]  << 8 | buf[10];
+    *nitrogen    = (uint16_t)buf[11] << 8 | buf[12];
+    *phosphorus  = (uint16_t)buf[13] << 8 | buf[14];
+    *potassium   = (uint16_t)buf[15] << 8 | buf[16];
+
+    return true;
+}
+
+bool checkLCD() {
+    Wire.beginTransmission(LCD_ADDR);
+    return (Wire.endTransmission() == 0);
+}
+
+void lcdWrite(uint8_t col, uint8_t row, const char *text, uint8_t width = 20) {
+    if (!lcdAvailable) return;
+    lcd.setCursor(col, row);
+    uint8_t i = 0;
+    while (text[i] && i < width) { lcd.print(text[i++]); }
+    while (i++ < width)          { lcd.print(' ');        }
+}
+
+void showWelcome() {
+    if (!lcdAvailable) return;
+    lcd.clear();
+    lcdWrite(0, 0, "====================");
+    lcdWrite(0, 1, "   AgriCheck v2.0   ");
+    lcdWrite(0, 2, " 7-in-1 Soil Sensor ");
+    lcdWrite(0, 3, "====================");
+    delay(2500);
+}
+
+void showPage1(uint16_t hum, uint16_t temp, uint16_t ec, uint16_t ph) {
+    if (!lcdAvailable) return;
+    char row[21];
+    lcdWrite(0, 0, "-- AgriCheck 1/2  --");
+    snprintf(row, sizeof(row), "Humidity   : %4d.%d%%", hum  / 10, hum  % 10); lcdWrite(0, 1, row);
+    snprintf(row, sizeof(row), "Temp (C)   : %4d.%d ", temp / 10, temp % 10); lcdWrite(0, 2, row);
+    snprintf(row, sizeof(row), "pH         :  %2d.%d  ", ph   / 10, ph   % 10); lcdWrite(0, 3, row);
+}
+
+void showPage2(uint16_t ec, uint16_t n, uint16_t p, uint16_t k) {
+    if (!lcdAvailable) return;
+    char row[21];
+    lcdWrite(0, 0, "-- AgriCheck 2/2  --");
+    snprintf(row, sizeof(row), "EC  (us/cm): %6d ", ec);          lcdWrite(0, 1, row);
+    snprintf(row, sizeof(row), "N (Nitrog) : %4d    ", n);         lcdWrite(0, 2, row);
+    snprintf(row, sizeof(row), "P:%4d  K:%4d mg/kg", p, k);       lcdWrite(0, 3, row);
+}
+
+void showError() {
+    if (!lcdAvailable) return;
+    lcdWrite(0, 0, "-- AgriCheck v2.0 --");
+    lcdWrite(0, 1, "                    ");
+    lcdWrite(0, 2, "  !! Sensor Error!! ");
+    lcdWrite(0, 3, "  Check 12V & GND   ");
+}
+
+void setup() {
+    Serial.begin(115200);
+    while (!Serial) delay(10);
+
+    pinMode(RS485_DE_RE_PIN, OUTPUT);
+    digitalWrite(RS485_DE_RE_PIN, LOW);
+
+    npkSerial.begin(RS485_BAUD, SERIAL_8N1, RS485_RX_PIN, RS485_TX_PIN);
+    Serial.printf("[INIT] Serial2 RX=GPIO%d TX=GPIO%d DE/RE=GPIO%d @ %d baud\n",
+                  RS485_RX_PIN, RS485_TX_PIN, RS485_DE_RE_PIN, RS485_BAUD);
+
+    Wire.begin();
+    lcdAvailable = checkLCD();
+
+    if (lcdAvailable) {
+        lcd.init();
+        lcd.backlight();
+        Serial.printf("[INIT] LCD found at 0x%02X\n", LCD_ADDR);
+        showWelcome();
+    } else {
+        Serial.printf("[WARN] LCD not found at 0x%02X. Running without LCD.\n", LCD_ADDR);
+    }
+
+    Serial.println("[INIT] AgriCheck ready. Polling every 3 seconds.");
+    Serial.println("--------------------------------------------");
+}
+
+void loop() {
+    static uint32_t lastPoll     = 0;
+    static bool     showingPage1 = true;
+
+    if (millis() - lastPoll < POLL_INTERVAL_MS) return;
+    lastPoll = millis();
+
+    bool lcdWasAvailable = lcdAvailable;
+    lcdAvailable = checkLCD();
+    if (lcdAvailable && !lcdWasAvailable) {
+        Serial.println("[LCD] Reconnected. Reinitializing...");
+        lcd.init();
+        lcd.backlight();
+    }
+
+    Serial.println("\n[POLL] Querying 7-in-1 soil sensor...");
+    sendModbusRequest(SLAVE_ID, REG_START, REG_COUNT);
+
+    uint16_t humidity = 0, temperature = 0, ec = 0, ph = 0;
+    uint16_t nitrogen = 0, phosphorus  = 0, potassium = 0;
+
+    bool ok = receiveModbusResponse(&humidity, &temperature, &ec, &ph,
+                                    &nitrogen, &phosphorus, &potassium);
+    if (ok) {
+        Serial.println("[OK] Sensor data decoded:");
+        Serial.printf("     Humidity    : %d.%d %%\n",   humidity    / 10, humidity    % 10);
+        Serial.printf("     Temperature : %d.%d C\n",    temperature / 10, temperature % 10);
+        Serial.printf("     EC          : %d us/cm\n",   ec);
+        Serial.printf("     pH          : %d.%d\n",      ph          / 10, ph          % 10);
+        Serial.printf("     Nitrogen    : %d mg/kg\n",   nitrogen);
+        Serial.printf("     Phosphorus  : %d mg/kg\n",   phosphorus);
+        Serial.printf("     Potassium   : %d mg/kg\n",   potassium);
+
+        if (showingPage1) {
+            showPage1(humidity, temperature, ec, ph);
+        } else {
+            showPage2(ec, nitrogen, phosphorus, potassium);
+        }
+        showingPage1 = !showingPage1;
+
+    } else {
+        Serial.println("[FAIL] No valid response.");
+        showError();
+    }
+
+    Serial.println("--------------------------------------------");
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+---------------------------------------------------------------------------
+scanner.py file:
+
+# ============================================================
+#  AgriCheck - Modbus RTU Slave ID & Baud Rate Scanner
+#  Usage: python scanner.py
+#  Requirement: pip install pyserial
+# ============================================================
+
+import serial
+import time
+
+# ─── CONFIGURATION ───────────────────────────────────────────
+PORT        = "COM4"
+BAUD_RATES  = [4800, 9600, 19200, 38400, 115200]
+TIMEOUT     = 1.0   # seconds to wait for a response per attempt
+
+# Modbus registers to try (will try each one per ID)
+REGISTERS   = [0x0000, 0x0004]   # 0x0000 = Temperature, 0x0004 = Nitrogen
+REG_COUNT   = 0x0001              # Read 1 register
+
+# ─────────────────────────────────────────────────────────────
+
+def crc16_modbus(data: bytes) -> bytes:
+    """
+    Calculate Modbus CRC-16.
+    Returns 2 bytes: [CRC_LOW, CRC_HIGH]
+    """
+    crc = 0xFFFF
+    for byte in data:
+        crc ^= byte
+        for _ in range(8):
+            if crc & 0x0001:
+                crc = (crc >> 1) ^ 0xA001
+            else:
+                crc >>= 1
+    # Low byte first, then high byte
+    return bytes([crc & 0xFF, (crc >> 8) & 0xFF])
+
+
+def build_request(slave_id: int, register: int, count: int) -> bytes:
+    """
+    Build a Modbus RTU Read Holding Registers (FC 0x03) frame.
+    Frame = SlaveID + FC + RegHigh + RegLow + CountHigh + CountLow + CRC_Low + CRC_High
+    """
+    frame = bytes([
+        slave_id,
+        0x03,                       # Function Code: Read Holding Registers
+        (register >> 8) & 0xFF,     # Register address HIGH byte
+        register & 0xFF,            # Register address LOW byte
+        (count >> 8) & 0xFF,        # Register count HIGH byte
+        count & 0xFF                # Register count LOW byte
+    ])
+    crc = crc16_modbus(frame)
+    return frame + crc
+
+
+def is_valid_response(response: bytes, slave_id: int) -> bool:
+    """
+    Validate a Modbus RTU response.
+    Accepts both normal responses and Modbus exception responses.
+    Minimum valid response is 4 bytes (exception) or more.
+    """
+    if len(response) < 4:
+        return False
+
+    # Byte 0: Slave ID must match
+    if response[0] != slave_id:
+        return False
+
+    # Byte 1: Function code (normal = 0x03, exception = 0x83)
+    fc = response[1]
+    if fc not in (0x03, 0x83):
+        return False
+
+    # Validate CRC on the received frame
+    received_crc  = response[-2:]
+    calculated_crc = crc16_modbus(response[:-2])
+    if received_crc != calculated_crc:
+        return False
+
+    return True
+
+
+def scan():
+    print("=" * 60)
+    print("  AgriCheck - Modbus RTU Scanner")
+    print(f"  Port     : {PORT}")
+    print(f"  Baud Rates: {BAUD_RATES}")
+    print(f"  Slave IDs : 1 to 255")
+    print(f"  Timeout  : {TIMEOUT}s per attempt")
+    print("=" * 60)
+
+    total_attempts = len(BAUD_RATES) * 255 * len(REGISTERS)
+    attempt = 0
+    found = False
+
+    for baud in BAUD_RATES:
+        if found:
+            break
+
+        print(f"\n[BAUD] Trying {baud} bps...")
+        print("-" * 60)
+
+        try:
+            ser = serial.Serial(
+                port     = PORT,
+                baudrate = baud,
+                bytesize = serial.EIGHTBITS,
+                parity   = serial.PARITY_NONE,
+                stopbits = serial.STOPBITS_ONE,
+                timeout  = TIMEOUT
+            )
+        except serial.SerialException as e:
+            print(f"[ERROR] Could not open {PORT}: {e}")
+            print("  Check that your USB-RS485 dongle is connected and COM4 is correct.")
+            return
+
+        try:
+            for slave_id in range(1, 256):
+                if found:
+                    break
+
+                for register in REGISTERS:
+                    attempt += 1
+                    reg_name = "Temperature" if register == 0x0000 else "Nitrogen"
+
+                    # Build and send the request
+                    request = build_request(slave_id, register, REG_COUNT)
+                    ser.reset_input_buffer()
+                    ser.write(request)
+
+                    # Print progress every 10 IDs to avoid flooding the console
+                    if slave_id % 10 == 1 or slave_id == 255:
+                        print(f"  Scanning Baud {baud}, ID {slave_id:>3} ({reg_name} reg 0x{register:04X})...")
+
+                    # Wait and read response
+                    time.sleep(TIMEOUT)
+                    response = ser.read(ser.in_waiting or 32)
+
+                    # Check if we got anything back
+                    if response:
+                        print(f"\n  [RAW RESPONSE] Baud {baud}, ID {slave_id}: {response.hex(' ').upper()}")
+
+                        if is_valid_response(response, slave_id):
+                            print()
+                            print("=" * 60)
+                            print("  *** SENSOR FOUND! ***")
+                            print(f"  Baud Rate : {baud}")
+                            print(f"  Slave ID  : {slave_id} (0x{slave_id:02X})")
+                            print(f"  Register  : 0x{register:04X} ({reg_name})")
+                            print(f"  Response  : {response.hex(' ').upper()}")
+                            print("=" * 60)
+
+                            # Decode and print the register value if normal response
+                            if response[1] == 0x03 and len(response) >= 7:
+                                value = (response[3] << 8) | response[4]
+                                print(f"  Decoded Value : {value}")
+                                if register == 0x0000:
+                                    print(f"  Temperature   : {value / 10.0} C")
+                                elif register == 0x0004:
+                                    print(f"  Nitrogen      : {value} mg/kg")
+
+                            found = True
+                            break
+
+                        else:
+                            print(f"  [INVALID] Response received but failed validation (noise or wrong ID).")
+
+        finally:
+            ser.close()
+
+    print()
+    if not found:
+        print("=" * 60)
+        print("  SCAN COMPLETE - Sensor NOT found.")
+        print("  Suggestions:")
+        print("  1. Check that 12V power is supplied to the sensor.")
+        print("  2. Verify common GND between ESP32/PC and sensor.")
+        print("  3. Confirm A(+) and B(-) RS485 wires are not swapped.")
+        print("  4. Try increasing TIMEOUT to 0.3 or 0.5 at the top of this script.")
+        print("  5. Confirm the COM port is COM4 in Device Manager.")
+        print("=" * 60)
+    else:
+        print("  Update your Arduino sketch with the values above.")
+        print("  Change SLAVE_ID and RS485_BAUD to match.")
+
+
+if __name__ == "__main__":
+    scan()
+
+
+
+
+
+commands:
+pip install pyserial
+
+
+
+----------------------------------------------------------------------------
+
+
+FIREBASE CONFIGURATIONS
+
+npm install firebase
+
+
+// Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
+
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyCls3FShbGQ5RqEc2zjDNO0cbfzM5SBJVI",
+  authDomain: "agricheck-f90dd.firebaseapp.com",
+  projectId: "agricheck-f90dd",
+  storageBucket: "agricheck-f90dd.firebasestorage.app",
+  messagingSenderId: "503137367705",
+  appId: "1:503137367705:web:8df8fba610afc7903d2a08",
+  measurementId: "G-BY7C02514X"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
+
+
+npm install -g firebase-tools
+
+
+
+firebase login
+
+firebase init
+
+firebase deploy
+

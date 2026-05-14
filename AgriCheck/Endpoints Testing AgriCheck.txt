@@ -1,0 +1,68 @@
+cd D:\COURSES\AgriCheck
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+
+---------------------------------------------------------------
+{
+  "message": "What fertilizer should I use?"
+}
+---------------------------------------------------------------
+{
+  "message": "How much fertilizer for wheat?",
+  "land_size_acres": 5.0
+}
+---------------------------------------------------------------
+{
+  "message": "What is NPK fertilizer?",
+  "include_sensor_data": false
+}
+---------------------------------------------------------------
+{
+  "message": "میرے کھیت میں کون سی کھاد استعمال کروں؟"
+}
+---------------------------------------------------------------
+{
+  "message": "What is my soil nitrogen level?"
+}
+
+
+{
+  "message": "Is it good or bad?",
+  "session_id": "abc-123-xyz"
+}
+---------------------------------------------------------------
+{
+  "message": "How much fertilizer?",
+  "land_size_acres": 999.0
+}
+---------------------------------------------------------------
+{
+  "message": "How much fertilizer?",
+  "land_size_acres": 0.5
+}
+---------------------------------------------------------------
+{
+  "message": ""
+}
+---------------------------------------------------------------
+{
+  "land_size_acres": 5.0
+}
+---------------------------------------------------------------
+{
+  "message": "میرے 10 ایکڑ گندم کے کھیت کے لیے کتنی DAP چاہیے؟",
+  "session_id": "custom-session-123",
+  "land_size_acres": 10.0,
+  "include_sensor_data": true
+}
+---------------------------------------------------------------
+{
+  "message": "What is the best time to plant wheat?",
+  "include_sensor_data": false
+}
+---------------------------------------------------------------
+no data
+
+{
+  "message": "What fertilizer do I need?"
+}

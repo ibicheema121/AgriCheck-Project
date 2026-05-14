@@ -1,0 +1,10 @@
+key1: 7IsxnDOjVznhWaBnflb6nrvEA2x7BVHE8affhxc3d08V5odjOJrlJQQJ99CCACYeBjFXJ3w3AAAYACOG53FU
+
+key2:
+1ne8YqgRde1tjxRtFOZXld8hSzBs926iR8HlgUuDrLq5iXQd1nXFJQQJ99CCACYeBjFXJ3w3AAAYACOGN4lv
+
+location/region:
+eastus
+
+endpoint:
+https://eastus.api.cognitive.microsoft.com/
