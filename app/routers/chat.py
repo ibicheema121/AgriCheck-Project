@@ -75,10 +75,10 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from datetime import datetime
-from ..database import get_db
-from ..schemas.sensor import ChatRequest, ChatResponse
-from ..services.llm_agent import get_agricultural_advice
-from ..crud.sensor import get_latest_reading
+from database import get_db
+from schemas.sensor import ChatRequest, ChatResponse
+from services.llm_agent import get_agricultural_advice
+from crud.sensor import get_latest_reading
 import uuid
 
 router = APIRouter(prefix="/chat", tags=["AI Agricultural Advisor"])
