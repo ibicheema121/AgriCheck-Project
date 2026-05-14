@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
-from ..models import SensorReading  # ✅ Fixed import
-from ..schemas.sensor import SensorReadingCreate
+from models import SensorReading  # ✅ Fixed import
+from schemas.sensor import SensorReadingCreate
 
 
 def create_sensor_reading(db: Session, reading: SensorReadingCreate):
