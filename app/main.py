@@ -4,7 +4,7 @@ from database import engine, Base
 from routers import sensor, chat, voice 
 from routers.public_chat import router as public_chat_router
 from app.routers.crop_recommendation import router as crop_recommendation_router
-from .config import CORS_ORIGINS
+from config import CORS_ORIGINS
 
 
 # Create database tables
