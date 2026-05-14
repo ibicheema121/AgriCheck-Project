@@ -907,7 +907,7 @@ import re
 # ── Shared scoring engine — single source of truth for crop ranking ───────────
 # Both this agent and the /api/v1/recommend-crops endpoint use the same function
 # so they always return identical rankings for identical sensor data.
-from ..routers.crop_recommendation import score_crops_locally, CROP_PROFILES
+from routers.crop_recommendation import score_crops_locally, CROP_PROFILES
 
 load_dotenv()
 
