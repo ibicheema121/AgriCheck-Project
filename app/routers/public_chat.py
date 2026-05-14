@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional
-from ..services.public_agent import public_chat_agent
+from services.public_agent import public_chat_agent
 
 # ============================================
 # PUBLIC CHAT ROUTER
