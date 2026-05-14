@@ -1,0 +1,87 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Noto+Nastaliq+Urdu:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 140 10% 97%;
+    --foreground: 150 25% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 150 25% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 150 25% 10%;
+
+    --primary: 152 55% 28%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 145 20% 92%;
+    --secondary-foreground: 152 55% 20%;
+
+    --muted: 140 12% 94%;
+    --muted-foreground: 150 10% 45%;
+
+    --accent: 152 40% 90%;
+    --accent-foreground: 152 55% 20%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 145 15% 88%;
+    --input: 145 15% 88%;
+    --ring: 152 55% 28%;
+
+    --radius: 0.75rem;
+
+    --sidebar-background: 152 55% 12%;
+    --sidebar-foreground: 140 15% 85%;
+    --sidebar-primary: 140 60% 55%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 152 40% 18%;
+    --sidebar-accent-foreground: 140 15% 90%;
+    --sidebar-border: 152 30% 20%;
+    --sidebar-ring: 140 60% 55%;
+
+    --success: 145 63% 42%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+    --info: 200 80% 50%;
+    --info-foreground: 0 0% 100%;
+
+    --live-pulse: 145 80% 45%;
+    --glow-ai: 152 70% 40%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', sans-serif;
+  }
+  [dir="rtl"] body,
+  [dir="rtl"] {
+    font-family: 'Noto Nastaliq Urdu', 'Inter', sans-serif;
+  }
+}
+
+@layer utilities {
+  .glass-card {
+    @apply bg-card/80 backdrop-blur-sm border border-border shadow-sm;
+  }
+  .metric-card {
+    @apply bg-card rounded-xl border border-border shadow-sm p-5 transition-all duration-300 hover:shadow-md hover:border-primary/20;
+  }
+  .live-dot {
+    @apply w-2 h-2 rounded-full bg-[hsl(var(--live-pulse))] animate-live-pulse;
+  }
+  .ai-glow {
+    box-shadow: 0 0 20px hsl(var(--glow-ai) / 0.4), 0 0 60px hsl(var(--glow-ai) / 0.15);
+  }
+}

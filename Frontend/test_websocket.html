@@ -1,0 +1,736 @@
+<!-- <!DOCTYPE html>
+<html>
+<head>
+    <title>AgriCheck Voice Advisor Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        h1 { color: #2e7d32; }
+        .status-bar { padding: 10px; border-radius: 5px; margin: 10px 0; font-weight: bold; }
+        .status-recording { background: #c8e6c9; color: #2e7d32; }
+        .status-muted { background: #ffcdd2; color: #c62828; }
+        .status-idle { background: #e0e0e0; color: #424242; }
+        button { padding: 8px 16px; margin: 5px; cursor: pointer; border: 1px solid #ccc; border-radius: 4px; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        #messages { border: 1px solid #ccc; padding: 10px; height: 400px; overflow-y: auto; margin: 10px 0; font-size: 14px; }
+        .msg-error { color: #c62828; }
+        .msg-status { color: #1565c0; }
+        .msg-transcription { color: #2e7d32; }
+        .msg-ai { color: #6a1b9a; }
+        .msg-info { color: #455a64; }
+        .msg-mute { color: #e65100; }
+        input[type="number"] { width: 80px; padding: 4px; }
+        audio { width: 100%; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <h1>🌾 AgriCheck Voice Advisor Test</h1>
+
+    <div id="statusBar" class="status-bar status-idle">🔌 Ready to connect</div>
+
+    <div>
+        <button id="connectBtn" onclick="connectWS()">Connect</button>
+        <button id="disconnectBtn" onclick="disconnectWS()" disabled>Disconnect</button>
+        <button id="startRecBtn" onclick="startRecording()" disabled>Start Recording</button>
+        <button id="stopRecBtn" onclick="stopRecording()" disabled>Stop Recording</button>
+    </div>
+
+    <div style="margin: 10px 0;">
+        <label>Land Size (acres): <input type="number" id="landSize" value="1.0" step="0.1" min="0.1"></label>
+        <button onclick="updateConfig()">Update Config</button>
+    </div>
+
+    <h3>Messages:</h3>
+    <div id="messages"></div>
+
+    <audio id="audioPlayer" controls></audio>
+
+    <script>
+        var ws = null;
+        var mediaStream = null;
+        var audioContext = null;
+        var scriptProcessor = null;
+        var isRecording = false;
+        var isMicMuted = false;
+        var audioChunks = [];
+        var audioPlayer = document.getElementById('audioPlayer');
+
+        function log(msg, cls) {
+            cls = cls || 'msg-info';
+            var div = document.getElementById('messages');
+            var p = document.createElement('p');
+            p.className = cls;
+            p.textContent = msg;
+            div.appendChild(p);
+            div.scrollTop = div.scrollHeight;
+        }
+
+        function updateStatus(text, type) {
+            type = type || 'idle';
+            var bar = document.getElementById('statusBar');
+            bar.textContent = text;
+            bar.className = 'status-bar status-' + type;
+        }
+
+        function notifyPlaybackEnded() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'audio_playback_ended' }));
+                console.log('Sent audio_playback_ended to server');
+            }
+        }
+
+        function connectWS() {
+            try {
+                // ✅ Always connect to the FastAPI backend on port 8000
+                var host = window.location.hostname || 'localhost';
+                var backendPort = '8000';
+                var url = 'ws://' + host + ':' + backendPort + '/voice/ws/voice-advisor';
+
+                log('Connecting to ' + url + '...', 'msg-info');
+
+                ws = new WebSocket(url);
+
+                ws.onopen = function() {
+                    log('Connected to server', 'msg-status');
+                    updateStatus('🟢 Connected', 'recording');
+                    document.getElementById('connectBtn').disabled = true;
+                    document.getElementById('disconnectBtn').disabled = false;
+                    document.getElementById('startRecBtn').disabled = false;
+                };
+
+                ws.onmessage = function(event) {
+                    try {
+                        var data = JSON.parse(event.data);
+
+                        switch (data.type) {
+                            case 'status':
+                                log('📢 ' + data.message, 'msg-status');
+                                break;
+
+                            case 'transcription':
+                                log('🎤 You said: ' + data.text, 'msg-transcription');
+                                log('Language: ' + data.language, 'msg-info');
+                                break;
+
+                            case 'ai_response':
+                                log('🤖 AI: ' + data.text, 'msg-ai');
+                                break;
+
+                            case 'audio_chunk':
+                                audioChunks.push(base64ToBytes(data.data));
+                                break;
+
+                            case 'mute_mic':
+                                isMicMuted = true;
+                                updateStatus('🔇 Mic muted — AI is responding...', 'muted');
+                                log('🔇 Mic muted during AI response', 'msg-mute');
+                                break;
+
+                            case 'unmute_mic':
+                                isMicMuted = false;
+                                if (isRecording) {
+                                    updateStatus('🎤 Recording... Speak now!', 'recording');
+                                }
+                                log('🎤 Mic unmuted — speak now', 'msg-mute');
+                                break;
+
+                            case 'completed':
+                                log('✅ Audio received, playing...', 'msg-status');
+                                playAudioChunks();
+                                break;
+
+                            case 'error':
+                                log('❌ ' + data.message, 'msg-error');
+                                break;
+
+                            case 'keep_alive':
+                            case 'pong':
+                                break;
+
+                            default:
+                                console.log('Unknown message type:', data.type);
+                        }
+                    } catch (e) {
+                        console.error('Error parsing message:', e);
+                    }
+                };
+
+                ws.onclose = function() {
+                    log('Disconnected from server', 'msg-status');
+                    updateStatus('🔌 Disconnected', 'idle');
+                    resetButtons();
+                };
+
+                ws.onerror = function(err) {
+                    log('❌ WebSocket connection error. Is the server running?', 'msg-error');
+                    console.error('WebSocket error:', err);
+                    resetButtons();
+                };
+
+            } catch (e) {
+                log('❌ Failed to connect: ' + e.message, 'msg-error');
+                console.error('Connect error:', e);
+            }
+        }
+
+        function disconnectWS() {
+            stopRecording();
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+            resetButtons();
+        }
+
+        function resetButtons() {
+            document.getElementById('connectBtn').disabled = false;
+            document.getElementById('disconnectBtn').disabled = true;
+            document.getElementById('startRecBtn').disabled = true;
+            document.getElementById('stopRecBtn').disabled = true;
+            isRecording = false;
+            isMicMuted = false;
+        }
+
+        function startRecording() {
+            navigator.mediaDevices.getUserMedia({
+                audio: {
+                    sampleRate: 16000,
+                    channelCount: 1,
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                }
+            }).then(function(stream) {
+                mediaStream = stream;
+
+                audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+                var source = audioContext.createMediaStreamSource(stream);
+
+                scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1);
+
+                scriptProcessor.onaudioprocess = function(event) {
+                    if (!isRecording || !ws || ws.readyState !== WebSocket.OPEN) return;
+                    if (isMicMuted) return;
+
+                    var inputData = event.inputBuffer.getChannelData(0);
+                    var pcm16 = new Int16Array(inputData.length);
+
+                    for (var i = 0; i < inputData.length; i++) {
+                        var s = Math.max(-1, Math.min(1, inputData[i]));
+                        pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+                    }
+
+                    ws.send(pcm16.buffer);
+                };
+
+                source.connect(scriptProcessor);
+                scriptProcessor.connect(audioContext.destination);
+
+                isRecording = true;
+                isMicMuted = false;
+
+                document.getElementById('startRecBtn').disabled = true;
+                document.getElementById('stopRecBtn').disabled = false;
+
+                updateStatus('🎤 Recording... Speak now!', 'recording');
+                log('📊 Audio: ' + audioContext.sampleRate + 'Hz, Mono, 16-bit', 'msg-info');
+                log('🎤 Recording started - speak in Urdu or English', 'msg-status');
+
+            }).catch(function(err) {
+                log('❌ Microphone error: ' + err.message, 'msg-error');
+            });
+        }
+
+        function stopRecording() {
+            isRecording = false;
+            isMicMuted = false;
+
+            if (scriptProcessor) {
+                scriptProcessor.disconnect();
+                scriptProcessor = null;
+            }
+            if (audioContext) {
+                audioContext.close();
+                audioContext = null;
+            }
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(function(t) { t.stop(); });
+                mediaStream = null;
+            }
+
+            document.getElementById('startRecBtn').disabled = false;
+            document.getElementById('stopRecBtn').disabled = true;
+
+            updateStatus('🔌 Connected (not recording)', 'idle');
+            log('🛑 Recording stopped', 'msg-status');
+        }
+
+        function updateConfig() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                var landSize = parseFloat(document.getElementById('landSize').value) || 1.0;
+                ws.send(JSON.stringify({ type: 'config', land_size_acres: landSize }));
+                log('⚙️ Updated land size: ' + landSize + ' acres', 'msg-info');
+            }
+        }
+
+        function base64ToBytes(base64) {
+            var binary = atob(base64);
+            var bytes = new Uint8Array(binary.length);
+            for (var i = 0; i < binary.length; i++) {
+                bytes[i] = binary.charCodeAt(i);
+            }
+            return bytes;
+        }
+
+        function playAudioChunks() {
+            if (audioChunks.length === 0) {
+                log('⚠️ No audio to play', 'msg-info');
+                notifyPlaybackEnded();
+                return;
+            }
+
+            var totalLength = 0;
+            audioChunks.forEach(function(chunk) { totalLength += chunk.length; });
+
+            var combined = new Uint8Array(totalLength);
+            var offset = 0;
+            audioChunks.forEach(function(chunk) {
+                combined.set(chunk, offset);
+                offset += chunk.length;
+            });
+
+            var blob = new Blob([combined], { type: 'audio/mpeg' });
+            var url = URL.createObjectURL(blob);
+
+            audioPlayer.src = url;
+
+            audioPlayer.onplay = function() {
+                isMicMuted = true;
+                updateStatus('🔊 Playing AI response...', 'muted');
+                log('🔊 Playing audio (' + Math.round(blob.size / 1024) + ' KB)', 'msg-info');
+            };
+
+            audioPlayer.onended = function() {
+                log('🎤 Audio finished', 'msg-mute');
+                URL.revokeObjectURL(url);
+                notifyPlaybackEnded();
+            };
+
+            audioPlayer.onerror = function() {
+                log('⚠️ Audio playback error', 'msg-error');
+                notifyPlaybackEnded();
+            };
+
+            audioPlayer.play().catch(function(err) {
+                log('⚠️ Auto-play blocked: ' + err.message + '. Click play button.', 'msg-error');
+                setTimeout(function() {
+                    if (isMicMuted) {
+                        notifyPlaybackEnded();
+                    }
+                }, 3000);
+            });
+
+            audioChunks = [];
+        }
+    </script>
+</body>
+</html> -->
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>AgriCheck Voice Advisor Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        h1 { color: #2e7d32; }
+        .status-bar { padding: 10px; border-radius: 5px; margin: 10px 0; font-weight: bold; }
+        .status-recording { background: #c8e6c9; color: #2e7d32; }
+        .status-muted { background: #ffcdd2; color: #c62828; }
+        .status-idle { background: #e0e0e0; color: #424242; }
+        button { padding: 8px 16px; margin: 5px; cursor: pointer; border: 1px solid #ccc; border-radius: 4px; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        #messages { border: 1px solid #ccc; padding: 10px; height: 400px; overflow-y: auto; margin: 10px 0; font-size: 14px; }
+        .msg-error { color: #c62828; }
+        .msg-status { color: #1565c0; }
+        .msg-transcription { color: #2e7d32; }
+        .msg-ai { color: #6a1b9a; }
+        .msg-info { color: #455a64; }
+        .msg-mute { color: #e65100; }
+        input[type="number"] { width: 80px; padding: 4px; }
+        audio { width: 100%; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <h1>🌾 AgriCheck Voice Advisor Test</h1>
+
+    <div id="statusBar" class="status-bar status-idle">🔌 Ready to connect</div>
+
+    <div>
+        <button id="connectBtn" onclick="connectWS()">Connect</button>
+        <button id="disconnectBtn" onclick="disconnectWS()" disabled>Disconnect</button>
+        <button id="startRecBtn" onclick="startRecording()" disabled>Start Recording</button>
+        <button id="stopRecBtn" onclick="stopRecording()" disabled>Stop Recording</button>
+    </div>
+
+    <div style="margin: 10px 0;">
+        <label>Land Size (acres): <input type="number" id="landSize" value="1.0" step="0.1" min="0.1"></label>
+        <button onclick="updateConfig()">Update Config</button>
+    </div>
+
+    <h3>Messages:</h3>
+    <div id="messages"></div>
+
+    <audio id="audioPlayer" controls></audio>
+
+    <script>
+        var ws = null;
+        var mediaStream = null;
+        var audioContext = null;
+        var scriptProcessor = null;
+        var isRecording = false;
+        var isMicMuted = false;
+        var audioChunks = [];
+        var audioPlayer = document.getElementById('audioPlayer');
+
+        function log(msg, cls) {
+            cls = cls || 'msg-info';
+            var div = document.getElementById('messages');
+            var p = document.createElement('p');
+            p.className = cls;
+            p.textContent = msg;
+            div.appendChild(p);
+            div.scrollTop = div.scrollHeight;
+        }
+
+        function updateStatus(text, type) {
+            type = type || 'idle';
+            var bar = document.getElementById('statusBar');
+            bar.textContent = text;
+            bar.className = 'status-bar status-' + type;
+        }
+
+        function notifyPlaybackEnded() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'audio_playback_ended' }));
+                console.log('Sent audio_playback_ended to server');
+            }
+        }
+
+        function connectWS() {
+            try {
+                var host = window.location.hostname || 'localhost';
+                var backendPort = '8000';
+                var url = 'ws://' + host + ':' + backendPort + '/voice/ws/voice-advisor';
+                // var url = 'wss://uncomputed-shawn-unhayed.ngrok-free.dev/voice/ws/voice-advisor';
+
+                log('Connecting to ' + url + '...', 'msg-info');
+
+                ws = new WebSocket(url);
+
+                ws.onopen = function() {
+                    log('Connected to server', 'msg-status');
+                    updateStatus('🟢 Connected', 'recording');
+                    document.getElementById('connectBtn').disabled = true;
+                    document.getElementById('disconnectBtn').disabled = false;
+                    document.getElementById('startRecBtn').disabled = false;
+                };
+
+                ws.onmessage = function(event) {
+                    try {
+                        var data = JSON.parse(event.data);
+
+                        switch (data.type) {
+                            case 'status':
+                                log('📢 ' + data.message, 'msg-status');
+                                break;
+
+                            case 'transcription':
+                                log('🎤 You said: ' + data.text, 'msg-transcription');
+                                log('Language: ' + data.language, 'msg-info');
+                                break;
+
+                            case 'ai_response':
+                                log('🤖 AI: ' + data.text, 'msg-ai');
+                                break;
+
+                            case 'audio_chunk':
+                                audioChunks.push(base64ToBytes(data.data));
+                                break;
+
+                            case 'mute_mic':
+                                isMicMuted = true;
+                                updateStatus('🔇 Mic muted — AI is responding...', 'muted');
+                                log('🔇 Mic muted during AI response', 'msg-mute');
+                                break;
+
+                            case 'unmute_mic':
+                                isMicMuted = false;
+                                if (isRecording) {
+                                    updateStatus('🎤 Recording... Speak now!', 'recording');
+                                }
+                                log('🎤 Mic unmuted — speak now', 'msg-mute');
+                                break;
+
+                            case 'completed':
+                                log('✅ Audio received, playing...', 'msg-status');
+                                playAudioChunks();
+                                break;
+
+                            case 'error':
+                                log('❌ ' + data.message, 'msg-error');
+                                break;
+
+                            case 'keep_alive':
+                            case 'pong':
+                                break;
+
+                            default:
+                                console.log('Unknown message type:', data.type);
+                        }
+                    } catch (e) {
+                        console.error('Error parsing message:', e);
+                    }
+                };
+
+                ws.onclose = function() {
+                    log('Disconnected from server', 'msg-status');
+                    updateStatus('🔌 Disconnected', 'idle');
+                    resetButtons();
+                };
+
+                ws.onerror = function(err) {
+                    log('❌ WebSocket connection error. Is the server running on port 8000?', 'msg-error');
+                    console.error('WebSocket error:', err);
+                    resetButtons();
+                };
+
+            } catch (e) {
+                log('❌ Failed to connect: ' + e.message, 'msg-error');
+                console.error('Connect error:', e);
+            }
+        }
+
+        function disconnectWS() {
+            stopRecording();
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+            resetButtons();
+        }
+
+        function resetButtons() {
+            document.getElementById('connectBtn').disabled = false;
+            document.getElementById('disconnectBtn').disabled = true;
+            document.getElementById('startRecBtn').disabled = true;
+            document.getElementById('stopRecBtn').disabled = true;
+            isRecording = false;
+            isMicMuted = false;
+        }
+
+        function startRecording() {
+            navigator.mediaDevices.getUserMedia({
+                audio: {
+                    sampleRate: 16000,
+                    channelCount: 1,
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                }
+            }).then(function(stream) {
+                mediaStream = stream;
+
+                audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+                var source = audioContext.createMediaStreamSource(stream);
+
+                scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1);
+
+                scriptProcessor.onaudioprocess = function(event) {
+                    if (!isRecording || !ws || ws.readyState !== WebSocket.OPEN) return;
+                    if (isMicMuted) return;
+
+                    var inputData = event.inputBuffer.getChannelData(0);
+                    var pcm16 = new Int16Array(inputData.length);
+
+                    for (var i = 0; i < inputData.length; i++) {
+                        var s = Math.max(-1, Math.min(1, inputData[i]));
+                        pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+                    }
+
+                    ws.send(pcm16.buffer);
+                };
+
+                source.connect(scriptProcessor);
+                scriptProcessor.connect(audioContext.destination);
+
+                isRecording = true;
+                isMicMuted = false;
+
+                document.getElementById('startRecBtn').disabled = true;
+                document.getElementById('stopRecBtn').disabled = false;
+
+                updateStatus('🎤 Recording... Speak now!', 'recording');
+                log('📊 Audio: ' + audioContext.sampleRate + 'Hz, Mono, 16-bit', 'msg-info');
+                log('🎤 Recording started - speak in Urdu or English', 'msg-status');
+
+            }).catch(function(err) {
+                log('❌ Microphone error: ' + err.message, 'msg-error');
+            });
+        }
+
+        function stopRecording() {
+            isRecording = false;
+            isMicMuted = false;
+
+            if (scriptProcessor) {
+                scriptProcessor.disconnect();
+                scriptProcessor = null;
+            }
+            if (audioContext) {
+                audioContext.close();
+                audioContext = null;
+            }
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(function(t) { t.stop(); });
+                mediaStream = null;
+            }
+
+            document.getElementById('startRecBtn').disabled = false;
+            document.getElementById('stopRecBtn').disabled = true;
+
+            updateStatus('🔌 Connected (not recording)', 'idle');
+            log('🛑 Recording stopped', 'msg-status');
+        }
+
+        function updateConfig() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                var landSize = parseFloat(document.getElementById('landSize').value) || 1.0;
+                ws.send(JSON.stringify({ type: 'config', land_size_acres: landSize }));
+                log('⚙️ Updated land size: ' + landSize + ' acres', 'msg-info');
+            }
+        }
+
+        function base64ToBytes(base64) {
+            var binary = atob(base64);
+            var bytes = new Uint8Array(binary.length);
+            for (var i = 0; i < binary.length; i++) {
+                bytes[i] = binary.charCodeAt(i);
+            }
+            return bytes;
+        }
+
+        function playAudioChunks() {
+            if (audioChunks.length === 0) {
+                log('⚠️ No audio to play', 'msg-info');
+                notifyPlaybackEnded();
+                return;
+            }
+
+            var totalLength = 0;
+            audioChunks.forEach(function(chunk) { totalLength += chunk.length; });
+
+            var combined = new Uint8Array(totalLength);
+            var offset = 0;
+            audioChunks.forEach(function(chunk) {
+                combined.set(chunk, offset);
+                offset += chunk.length;
+            });
+
+            var blob = new Blob([combined], { type: 'audio/mpeg' });
+            var url = URL.createObjectURL(blob);
+
+            audioPlayer.src = url;
+
+            audioPlayer.onplay = function() {
+                isMicMuted = true;
+                updateStatus('🔊 Playing AI response...', 'muted');
+                log('🔊 Playing audio (' + Math.round(blob.size / 1024) + ' KB)', 'msg-info');
+            };
+
+            audioPlayer.onended = function() {
+                log('🎤 Audio finished', 'msg-mute');
+                URL.revokeObjectURL(url);
+                notifyPlaybackEnded();
+            };
+
+            audioPlayer.onerror = function() {
+                log('⚠️ Audio playback error', 'msg-error');
+                notifyPlaybackEnded();
+            };
+
+            audioPlayer.play().catch(function(err) {
+                log('⚠️ Auto-play blocked: ' + err.message + '. Click play button.', 'msg-error');
+                setTimeout(function() {
+                    if (isMicMuted) {
+                        notifyPlaybackEnded();
+                    }
+                }, 3000);
+            });
+
+            audioChunks = [];
+        }
+    </script>
+</body>
+</html>
