@@ -310,11 +310,11 @@ import traceback
 import uuid
 import base64
 
-from ..services.voice_service import voice_service
-from ..services.voice_engine import create_voice_engine
-from ..services.voice_llm_agent import get_voice_agricultural_advice, clear_voice_session
-from ..crud.sensor import get_latest_reading
-from ..database import get_db
+from services.voice_service import voice_service
+from services.voice_engine import create_voice_engine
+from services.voice_llm_agent import get_voice_agricultural_advice, clear_voice_session
+from crud.sensor import get_latest_reading
+from database import get_db
 
 router = APIRouter(prefix="/voice", tags=["Voice Services"])
 
