@@ -59,7 +59,7 @@
 
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import Column, Integer, Float, DateTime
-from .database import Base
+from database import Base
 
 PK_TZ = timezone(timedelta(hours=5))  # UTC+5
 
