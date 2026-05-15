@@ -45,6 +45,17 @@ interface TextMessage {
 export default function AIAdvisor() {
   const { t } = useLanguage();
   const { user } = useAuth();
+
+  // Component band hote waqt connection khatam karne ke liye
+  useEffect(() => {
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+    };
+  }, []);
+
+  
   const [messages, setMessages] = useState<Message[]>([
     {
       type: "info",
@@ -193,105 +204,180 @@ export default function AIAdvisor() {
   //   }
   // };
 
-  const connectWebSocket = async () => {
-  try {
-    setIsLoading(true);
-    setError(null);
+//   const connectWebSocket = async () => {
+//   try {
+//     setIsLoading(true);
+//     setError(null);
 
-    // ✅ Derive wss:// or ws:// from your existing VITE_API_BASE_URL env variable
-    const apiBase =
-      import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+//     // ✅ Derive wss:// or ws:// from your existing VITE_API_BASE_URL env variable
+//     const apiBase =
+//       import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
-    const wsUrl = apiBase
-      .replace(/^https:\/\//, "wss://")   // https://agricheck-production.up.railway.app → wss://...
-      .replace(/^http:\/\//, "ws://")     // http://127.0.0.1:8000 → ws://...
-      .concat("/voice/ws/voice-advisor"); // keep your existing backend path
+//     const wsUrl = apiBase
+//       .replace(/^https:\/\//, "wss://")   // https://agricheck-production.up.railway.app → wss://...
+//       .replace(/^http:\/\//, "ws://")     // http://127.0.0.1:8000 → ws://...
+//       .concat("/voice/ws/voice-advisor"); // keep your existing backend path
 
-    addMessage("info", t("connectingToVoiceAdvisor"));
+//     addMessage("info", t("connectingToVoiceAdvisor"));
 
-    const ws = new WebSocket(wsUrl);
+//     const ws = new WebSocket(wsUrl);
 
-    ws.onopen = () => {
-      setIsConnected(true);
-      setIsLoading(false);
-      addMessage("status", t("connectedToVoiceAdvisor"));
+//     ws.onopen = () => {
+//       setIsConnected(true);
+//       setIsLoading(false);
+//       addMessage("status", t("connectedToVoiceAdvisor"));
 
-      // Send initial config
-      if (landSize) {
-        ws.send(JSON.stringify({ type: "config", land_size_acres: landSize }));
-      }
-    };
+//       // Send initial config
+//       if (landSize) {
+//         ws.send(JSON.stringify({ type: "config", land_size_acres: landSize }));
+//       }
+//     };
 
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
+//     ws.onmessage = (event) => {
+//       try {
+//         const data = JSON.parse(event.data);
 
-        switch (data.type) {
-          case "status":
-            addMessage("status", `📢 ${data.message}`);
-            break;
-          case "transcription":
-            addMessage("transcription", `${t("youSaid")}: ${data.text}`, data.language);
-            break;
-          case "ai_response":
-            addMessage("ai_response", `🤖 ${data.text}`);
-            break;
-          case "audio_chunk":
-            audioChunksRef.current.push(base64ToBytes(data.data));
-            addMessage("info", `📥 Received audio chunk (${audioChunksRef.current.length} chunks)`);
-            break;
-          case "mute_mic":
-            setIsMicMuted(true);
-            isMicMutedRef.current = true;
-            addMessage("mute_mic", t("micMutedAiResponding"));
-            break;
-          case "unmute_mic":
-            setIsMicMuted(false);
-            isMicMutedRef.current = false;
-            addMessage("unmute_mic", t("micUnmutedSpeakNow"));
-            break;
-          case "completed":
-            addMessage("audio_playback", t("audioReceivedPlaying"));
-            playAudioChunks();
-            break;
-          case "error":
-            addMessage("error", `❌ ${data.message}`);
-            break;
-          case "keep_alive":
-          case "pong":
-            break;
-          default:
-            console.log("Unknown message type:", data.type);
+//         switch (data.type) {
+//           case "status":
+//             addMessage("status", `📢 ${data.message}`);
+//             break;
+//           case "transcription":
+//             addMessage("transcription", `${t("youSaid")}: ${data.text}`, data.language);
+//             break;
+//           case "ai_response":
+//             addMessage("ai_response", `🤖 ${data.text}`);
+//             break;
+//           case "audio_chunk":
+//             audioChunksRef.current.push(base64ToBytes(data.data));
+//             addMessage("info", `📥 Received audio chunk (${audioChunksRef.current.length} chunks)`);
+//             break;
+//           case "mute_mic":
+//             setIsMicMuted(true);
+//             isMicMutedRef.current = true;
+//             addMessage("mute_mic", t("micMutedAiResponding"));
+//             break;
+//           case "unmute_mic":
+//             setIsMicMuted(false);
+//             isMicMutedRef.current = false;
+//             addMessage("unmute_mic", t("micUnmutedSpeakNow"));
+//             break;
+//           case "completed":
+//             addMessage("audio_playback", t("audioReceivedPlaying"));
+//             playAudioChunks();
+//             break;
+//           case "error":
+//             addMessage("error", `❌ ${data.message}`);
+//             break;
+//           case "keep_alive":
+//           case "pong":
+//             break;
+//           default:
+//             console.log("Unknown message type:", data.type);
+//         }
+//       } catch (e) {
+//         console.error("Error parsing message:", e);
+//       }
+//     };
+
+//     ws.onclose = () => {
+//       setIsConnected(false);
+//       setIsRecording(false);
+//       isRecordingRef.current = false;
+//       setIsMicMuted(false);
+//       isMicMutedRef.current = false;
+//       addMessage("status", t("disconnected"));
+//     };
+
+//     ws.onerror = () => {
+//       setError("Failed to connect to Voice Advisor. Ensure backend is running.");
+//       setIsConnected(false);
+//       setIsLoading(false);
+//       addMessage("error", t("websocketFailed"));
+//     };
+
+//     wsRef.current = ws;
+//   } catch (err) {
+//     const msg = err instanceof Error ? err.message : "Connection failed";
+//     setError(msg);
+//     addMessage("error", `❌ ${msg}`);
+//     setIsLoading(false);
+//   }
+// };
+
+const connectWebSocket = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      // 1. Get Base URL and clean it
+      const apiBase = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+      const cleanBase = apiBase.endsWith('/') ? apiBase.slice(0, -1) : apiBase;
+
+      // 2. Convert to Secure WebSocket (wss) for Railway
+      const wsUrl = cleanBase
+        .replace(/^https:\/\//, "wss://")
+        .replace(/^http:\/\//, "ws://")
+        .concat("/voice/ws/voice-advisor");
+
+      addMessage("info", t("connectingToVoiceAdvisor"));
+
+      const ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        setIsConnected(true);
+        setIsLoading(false);
+        addMessage("status", t("connectedToVoiceAdvisor"));
+        if (landSize) {
+          ws.send(JSON.stringify({ type: "config", land_size_acres: landSize }));
         }
-      } catch (e) {
-        console.error("Error parsing message:", e);
-      }
-    };
+      };
 
-    ws.onclose = () => {
-      setIsConnected(false);
-      setIsRecording(false);
-      isRecordingRef.current = false;
-      setIsMicMuted(false);
-      isMicMutedRef.current = false;
-      addMessage("status", t("disconnected"));
-    };
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          switch (data.type) {
+            case "status": addMessage("status", `📢 ${data.message}`); break;
+            case "transcription": addMessage("transcription", `${t("youSaid")}: ${data.text}`, data.language); break;
+            case "ai_response": addMessage("ai_response", `🤖 ${data.text}`); break;
+            case "audio_chunk": audioChunksRef.current.push(base64ToBytes(data.data)); break;
+            case "mute_mic": 
+              setIsMicMuted(true); 
+              isMicMutedRef.current = true; 
+              addMessage("mute_mic", t("micMutedAiResponding")); 
+              break;
+            case "unmute_mic": 
+              setIsMicMuted(false); 
+              isMicMutedRef.current = false; 
+              addMessage("unmute_mic", t("micUnmutedSpeakNow")); 
+              break;
+            case "completed": 
+              addMessage("audio_playback", t("audioReceivedPlaying")); 
+              playAudioChunks(); 
+              break;
+            case "error": addMessage("error", `❌ ${data.message}`); break;
+          }
+        } catch (e) { console.error("Error parsing message:", e); }
+      };
 
-    ws.onerror = () => {
-      setError("Failed to connect to Voice Advisor. Ensure backend is running.");
-      setIsConnected(false);
+      ws.onclose = () => {
+        setIsConnected(false);
+        setIsRecording(false);
+        isRecordingRef.current = false;
+        addMessage("status", t("disconnected"));
+      };
+
+      ws.onerror = () => {
+        setError("WebSocket connection failed. Check backend URL.");
+        setIsConnected(false);
+        setIsLoading(false);
+      };
+
+      wsRef.current = ws;
+    } catch (err) {
       setIsLoading(false);
-      addMessage("error", t("websocketFailed"));
-    };
-
-    wsRef.current = ws;
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Connection failed";
-    setError(msg);
-    addMessage("error", `❌ ${msg}`);
-    setIsLoading(false);
-  }
-};
+      setError("Failed to connect.");
+    }
+  };
 
   // Disconnect from WebSocket
   const disconnectWebSocket = () => {
@@ -457,84 +543,115 @@ export default function AIAdvisor() {
     return bytes;
   };
 
+  // const playAudioChunks = () => {
+  //   if (audioChunksRef.current.length === 0) {
+  //     addMessage("info", "⚠️ No audio to play");
+  //     notifyPlaybackEnded();
+  //     return;
+  //   }
+
+  //   const totalLength = audioChunksRef.current.reduce((sum, chunk) => sum + chunk.length, 0);
+  //   const combined = new Uint8Array(totalLength);
+
+  //   let offset = 0;
+  //   audioChunksRef.current.forEach((chunk) => {
+  //     combined.set(chunk, offset);
+  //     offset += chunk.length;
+  //   });
+
+  //   // Try multiple audio formats for better compatibility
+  //   let audioBlob: Blob;
+
+  //   // Check first few bytes for format detection
+  //   const header = new Uint8Array(combined.slice(0, 4));
+  //   if (
+  //     header[0] === 0xFF &&
+  //     (header[1] & 0xE0) === 0xE0
+  //   ) {
+  //     // MP3 format detected
+  //     audioBlob = new Blob([combined], { type: "audio/mpeg" });
+  //     addMessage("info", "🎵 Audio format: MP3");
+  //   } else if (
+  //     header[0] === 0x52 &&
+  //     header[1] === 0x49 &&
+  //     header[2] === 0x46 &&
+  //     header[3] === 0x46
+  //   ) {
+  //     // WAV format detected (RIFF header)
+  //     audioBlob = new Blob([combined], { type: "audio/wav" });
+  //     addMessage("info", "🎵 Audio format: WAV");
+  //   } else if (
+  //     header[0] === 0x4F &&
+  //     header[1] === 0x67 &&
+  //     header[2] === 0x67 &&
+  //     header[3] === 0x53
+  //   ) {
+  //     // OGG format detected
+  //     audioBlob = new Blob([combined], { type: "audio/ogg" });
+  //     addMessage("info", "🎵 Audio format: OGG");
+  //   } else {
+  //     // Default to WAV, but try audio/webm as fallback
+  //     audioBlob = new Blob([combined], { type: "audio/wav;codec=opus" });
+  //     addMessage("info", "🎵 Audio format: Default (WAV/WebM)");
+  //   }
+
+  //   const url = window.URL.createObjectURL(audioBlob);
+
+  //   if (audioPlayerRef.current) {
+  //     audioPlayerRef.current.src = url;
+
+  //     // Add error handling
+  //     audioPlayerRef.current.onerror = (e) => {
+  //       console.error("Audio playback error:", e);
+  //       addMessage("error", "❌ Failed to play audio. Try using a different browser.");
+  //       notifyPlaybackEnded();
+  //     };
+
+  //     // Auto-play the audio
+  //     audioPlayerRef.current
+  //       .play()
+  //       .catch((err) => {
+  //         console.error("Audio play error:", err);
+  //         addMessage("error", `❌ Playback failed: ${err.message}`);
+  //       });
+
+  //     audioPlayerRef.current.onended = () => {
+  //       notifyPlaybackEnded();
+  //       window.URL.revokeObjectURL(url);
+  //     };
+  //   }
+
+  //   audioChunksRef.current = [];
+  // };
+
   const playAudioChunks = () => {
-    if (audioChunksRef.current.length === 0) {
-      addMessage("info", "⚠️ No audio to play");
-      notifyPlaybackEnded();
-      return;
-    }
+    if (audioChunksRef.current.length === 0) return;
 
     const totalLength = audioChunksRef.current.reduce((sum, chunk) => sum + chunk.length, 0);
     const combined = new Uint8Array(totalLength);
-
     let offset = 0;
     audioChunksRef.current.forEach((chunk) => {
       combined.set(chunk, offset);
       offset += chunk.length;
     });
 
-    // Try multiple audio formats for better compatibility
-    let audioBlob: Blob;
-
-    // Check first few bytes for format detection
-    const header = new Uint8Array(combined.slice(0, 4));
-    if (
-      header[0] === 0xFF &&
-      (header[1] & 0xE0) === 0xE0
-    ) {
-      // MP3 format detected
-      audioBlob = new Blob([combined], { type: "audio/mpeg" });
-      addMessage("info", "🎵 Audio format: MP3");
-    } else if (
-      header[0] === 0x52 &&
-      header[1] === 0x49 &&
-      header[2] === 0x46 &&
-      header[3] === 0x46
-    ) {
-      // WAV format detected (RIFF header)
-      audioBlob = new Blob([combined], { type: "audio/wav" });
-      addMessage("info", "🎵 Audio format: WAV");
-    } else if (
-      header[0] === 0x4F &&
-      header[1] === 0x67 &&
-      header[2] === 0x67 &&
-      header[3] === 0x53
-    ) {
-      // OGG format detected
-      audioBlob = new Blob([combined], { type: "audio/ogg" });
-      addMessage("info", "🎵 Audio format: OGG");
-    } else {
-      // Default to WAV, but try audio/webm as fallback
-      audioBlob = new Blob([combined], { type: "audio/wav;codec=opus" });
-      addMessage("info", "🎵 Audio format: Default (WAV/WebM)");
-    }
-
+    const audioBlob = new Blob([combined], { type: "audio/mpeg" });
     const url = window.URL.createObjectURL(audioBlob);
 
     if (audioPlayerRef.current) {
+      audioPlayerRef.current.pause(); // Purana audio rokein
       audioPlayerRef.current.src = url;
-
-      // Add error handling
-      audioPlayerRef.current.onerror = (e) => {
-        console.error("Audio playback error:", e);
-        addMessage("error", "❌ Failed to play audio. Try using a different browser.");
-        notifyPlaybackEnded();
-      };
-
-      // Auto-play the audio
-      audioPlayerRef.current
-        .play()
-        .catch((err) => {
-          console.error("Audio play error:", err);
-          addMessage("error", `❌ Playback failed: ${err.message}`);
-        });
+      audioPlayerRef.current.load(); // Naya source load karein
+      
+      audioPlayerRef.current.play().catch((err) => {
+        console.error("Playback error:", err);
+      });
 
       audioPlayerRef.current.onended = () => {
         notifyPlaybackEnded();
         window.URL.revokeObjectURL(url);
       };
     }
-
     audioChunksRef.current = [];
   };
 
