@@ -197,18 +197,24 @@ export default function AIAdvisor() {
   try {
     setIsLoading(true);
     setError(null);
-
-    // ✅ Derive wss:// or ws:// from your existing VITE_API_BASE_URL env variable
-    const apiBase =
-      import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
-
-    const wsUrl = apiBase
-      .replace(/^https:\/\//, "wss://")   // https://agricheck-production.up.railway.app → wss://...
-      .replace(/^http:\/\//, "ws://")     // http://127.0.0.1:8000 → ws://...
-      .concat("/voice/ws/voice-advisor"); // keep your existing backend path
-
+    
+    // ✅ Derive wss:// or ws:// with Double-Slash protection
+    const apiBase = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+    
+    // 1. Pehle base URL se aakhir wala slash (/) hatao agar hai toh
+    const cleanBase = apiBase.replace(/\/$/, ""); 
+    
+    // 2. Phir protocol change karo aur path jorro
+    const wsUrl = cleanBase
+      .replace(/^https:\/\//, "wss://")   // https -> wss
+      .replace(/^http:\/\//, "ws://")    // http -> ws
+      .concat("/voice/ws/voice-advisor");
+    
+    // 3. CRITICAL: Console mein check karo URL sahi ban raha hai ya nahi
+    console.log("🚀 Attempting WebSocket Connection to:", wsUrl);
+    
     addMessage("info", t("connectingToVoiceAdvisor"));
-
+    
     const ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {
