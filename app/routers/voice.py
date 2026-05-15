@@ -335,7 +335,7 @@ async def voice_advisor_websocket(websocket: WebSocket):
 
     voice_engine = create_voice_engine()
 
-    from ..database import SessionLocal
+    from database import SessionLocal
     db = SessionLocal()
 
     session_id = None
